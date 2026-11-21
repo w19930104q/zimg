@@ -1,4 +1,3 @@
-#include <climits>
 #include <cmath>
 #include <cstring>
 #include <exception>
@@ -330,6 +329,11 @@ std::unique_ptr<zimg::resize::Filter> translate_resize_filter(zimg_resample_filt
 		case ZIMG_RESIZE_BILINEAR:
 			return std::make_unique<zimg::resize::BilinearFilter>();
 		case ZIMG_RESIZE_BICUBIC:
+			// The "b" and "c" parameters must either both be left at their
+			// NAN default or both be specified; a partial specification is
+			// rejected rather than silently combined with a library default.
+			if (std::isnan(param_a) != std::isnan(param_b))
+				zimg::error::throw_<zimg::error::IllegalArgument>("bicubic parameters b and c must be specified together");
 			param_a = std::isnan(param_a) ? zimg::resize::BicubicFilter::DEFAULT_B : param_a;
 			param_b = std::isnan(param_b) ? zimg::resize::BicubicFilter::DEFAULT_C : param_b;
 			return std::make_unique<zimg::resize::BicubicFilter>(param_a, param_b);
@@ -340,8 +344,17 @@ std::unique_ptr<zimg::resize::Filter> translate_resize_filter(zimg_resample_filt
 		case ZIMG_RESIZE_SPLINE64:
 			return std::make_unique<zimg::resize::Spline64Filter>();
 		case ZIMG_RESIZE_LANCZOS:
-			param_a = std::isnan(param_a) ? zimg::resize::LanczosFilter::DEFAULT_TAPS
-				: std::clamp(param_a, 1.0, static_cast<double>(UINT_MAX));
+			// NAN selects the library default; any other non-finite value
+			// or a value outside the integer parameter domain is rejected.
+			if (std::isnan(param_a))
+				param_a = static_cast<double>(zimg::resize::LanczosFilter::DEFAULT_TAPS);
+			if (!std::isfinite(param_a))
+				zimg::error::throw_<zimg::error::IllegalArgument>("lanczos tap count out of range");
+			if (param_a < static_cast<double>(zimg::resize::LanczosFilter::MIN_TAPS) ||
+			    param_a >= static_cast<double>(zimg::resize::LanczosFilter::MAX_TAPS))
+				zimg::error::throw_<zimg::error::IllegalArgument>("lanczos tap count out of range");
+			if (param_a != std::floor(param_a))
+				zimg::error::throw_<zimg::error::IllegalArgument>("lanczos tap count must be an integer");
 			return std::make_unique<zimg::resize::LanczosFilter>(static_cast<unsigned>(param_a));
 		default:
 			zimg::error::throw_<zimg::error::EnumOutOfRange>("unrecognized resampling filter");

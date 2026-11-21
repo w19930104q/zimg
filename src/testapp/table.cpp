@@ -1,4 +1,5 @@
 #include <cmath>
+#include <stdexcept>
 #include "colorspace/colorspace.h"
 #include "common/cpuinfo.h"
 #include "common/pixel.h"
@@ -26,6 +27,9 @@ filter_uptr make_filter(double, double)
 
 filter_uptr make_bicubic_filter(double b, double c)
 {
+	// Mirror the validation performed by the public API.
+	if (std::isnan(b) != std::isnan(c))
+		throw std::runtime_error{ "bicubic parameters b and c must be specified together" };
 	b = std::isnan(b) ? zimg::resize::BicubicFilter::DEFAULT_B : b;
 	c = std::isnan(c) ? zimg::resize::BicubicFilter::DEFAULT_C : c;
 	return std::make_unique<zimg::resize::BicubicFilter>(b, c);
@@ -33,7 +37,12 @@ filter_uptr make_bicubic_filter(double b, double c)
 
 filter_uptr make_lanczos_filter(double taps, double)
 {
-	taps = std::isnan(taps) ? zimg::resize::LanczosFilter::DEFAULT_TAPS : std::max(taps, 1.0);
+	taps = std::isnan(taps) ? zimg::resize::LanczosFilter::DEFAULT_TAPS : taps;
+	if (!std::isfinite(taps) ||
+	    taps < static_cast<double>(zimg::resize::LanczosFilter::MIN_TAPS) ||
+	    taps >= static_cast<double>(zimg::resize::LanczosFilter::MAX_TAPS) ||
+	    taps != std::floor(taps))
+		throw std::runtime_error{ "lanczos tap count must be an integer in [1, 15]" };
 	return std::make_unique<zimg::resize::LanczosFilter>(static_cast<unsigned>(taps));
 }
 

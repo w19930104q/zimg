@@ -60,6 +60,30 @@ supported for upsampling and downsampling. Full support is provided for
 various coordinate systems, including the various chroma siting conventions
 (e.g. JPEG and MPEG2) as well as interlaced images.
 
+The parameterizable filters are configured through `filter_param_a` and
+`filter_param_b` of `zimg_graph_builder_params`. Parameters left at their
+default NAN value select the library default. Any parameter outside the
+documented domain is rejected with `ZIMG_ERROR_ILLEGAL_ARGUMENT` and a
+message describing the offending parameter.
+
+| Filter                | `filter_param_a`                         | `filter_param_b`                         |
+|-----------------------|------------------------------------------|------------------------------------------|
+| ZIMG_RESIZE_POINT     | unused                                   | unused                                   |
+| ZIMG_RESIZE_BILINEAR  | unused                                   | unused                                   |
+| ZIMG_RESIZE_BICUBIC   | "b": finite, [0.0, 1.0], default 0.0     | "c": finite, [0.0, 1.0], default 0.5     |
+| ZIMG_RESIZE_SPLINE16  | unused                                   | unused                                   |
+| ZIMG_RESIZE_SPLINE36  | unused                                   | unused                                   |
+| ZIMG_RESIZE_SPLINE64  | unused                                   | unused                                   |
+| ZIMG_RESIZE_LANCZOS   | tap count: integer, [1, 15], default 3   | unused                                   |
+
+For ZIMG_RESIZE_BICUBIC the "b" and "c" parameters must be specified
+together: either both remain NAN (library defaults) or both are set. A
+partial specification (only one of the two parameters) is rejected rather
+than silently combined with a default, as are non-finite values and values
+outside [0.0, 1.0]. For ZIMG_RESIZE_LANCZOS, the tap count must be a finite
+integral value in [1, 15]; fractional, negative, zero, and excessively large
+tap counts are rejected.
+
 Performance
 -----
 "z" is optimized for Intel(R) Architecture and features faster processing times

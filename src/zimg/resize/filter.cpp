@@ -144,15 +144,21 @@ double BilinearFilter::operator()(double x) const
 }
 
 
-BicubicFilter::BicubicFilter(double b, double c) :
-	p0{ (  6.0 -  2.0 * b           ) / 6.0 },
-	p2{ (-18.0 + 12.0 * b +  6.0 * c) / 6.0 },
-	p3{ ( 12.0 -  9.0 * b -  6.0 * c) / 6.0 },
-	q0{ (         8.0 * b + 24.0 * c) / 6.0 },
-	q1{ (       -12.0 * b - 48.0 * c) / 6.0 },
-	q2{ (         6.0 * b + 30.0 * c) / 6.0 },
-	q3{ (              -b -  6.0 * c) / 6.0 }
-{}
+BicubicFilter::BicubicFilter(double b, double c)
+{
+	if (!std::isfinite(b) || b < MIN_PARAM || b > MAX_PARAM)
+		error::throw_<error::IllegalArgument>("bicubic parameter b out of range");
+	if (!std::isfinite(c) || c < MIN_PARAM || c > MAX_PARAM)
+		error::throw_<error::IllegalArgument>("bicubic parameter c out of range");
+
+	p0 = (  6.0 -  2.0 * b           ) / 6.0;
+	p2 = (-18.0 + 12.0 * b +  6.0 * c) / 6.0;
+	p3 = ( 12.0 -  9.0 * b -  6.0 * c) / 6.0;
+	q0 = (         8.0 * b + 24.0 * c) / 6.0;
+	q1 = (       -12.0 * b - 48.0 * c) / 6.0;
+	q2 = (         6.0 * b + 30.0 * c) / 6.0;
+	q3 = (              -b -  6.0 * c) / 6.0;
+}
 
 unsigned BicubicFilter::support() const { return 2; }
 
@@ -231,10 +237,10 @@ double Spline64Filter::operator()(double x) const
 
 LanczosFilter::LanczosFilter(unsigned taps) : taps{ taps }
 {
-	if (taps <= 0)
-		error::throw_<error::IllegalArgument>("lanczos tap count must be positive");
+	if (taps < MIN_TAPS)
+		error::throw_<error::IllegalArgument>("lanczos tap count out of range");
 	if (taps >= MAX_TAPS)
-		error::throw_<error::IllegalArgument>("lanczos tap count too high");
+		error::throw_<error::IllegalArgument>("lanczos tap count out of range");
 }
 
 unsigned LanczosFilter::support() const { return taps; }

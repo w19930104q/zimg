@@ -1,4 +1,5 @@
 #include <cmath>
+#include "common/except.h"
 #include "resize/filter.h"
 
 #include "gtest/gtest.h"
@@ -103,4 +104,60 @@ TEST(FilterTest, test_lanczos)
 		EXPECT_EQ(i, f.support());
 		check_interpolating(f);
 	}
+}
+
+TEST(FilterTest, test_bicubic_parameter_validation)
+{
+	const double bad_values[] = { -1.0, -0.01, 1.01, 1e9, NAN, INFINITY, -INFINITY };
+
+	// Out-of-range or non-finite "b" or "c" is rejected with a distinguishable message.
+	for (double bad : bad_values) {
+		SCOPED_TRACE(bad);
+		try {
+			zimg::resize::BicubicFilter f{ bad, zimg::resize::BicubicFilter::DEFAULT_C };
+			FAIL() << "bad b accepted: " << bad;
+		} catch (const zimg::error::IllegalArgument &e) {
+			EXPECT_STREQ("bicubic parameter b out of range", e.what());
+		}
+
+		try {
+			zimg::resize::BicubicFilter f{ zimg::resize::BicubicFilter::DEFAULT_B, bad };
+			FAIL() << "bad c accepted: " << bad;
+		} catch (const zimg::error::IllegalArgument &e) {
+			EXPECT_STREQ("bicubic parameter c out of range", e.what());
+		}
+	}
+
+	// Boundary values of the documented domain are accepted.
+	EXPECT_NO_THROW(zimg::resize::BicubicFilter(0.0, 0.0));
+	EXPECT_NO_THROW(zimg::resize::BicubicFilter(1.0, 1.0));
+
+	// Default constructor remains equivalent to the documented defaults.
+	zimg::resize::BicubicFilter default_filter;
+	zimg::resize::BicubicFilter explicit_default{ zimg::resize::BicubicFilter::DEFAULT_B,
+	                                             zimg::resize::BicubicFilter::DEFAULT_C };
+	for (double x = -2.0; x <= 2.0; x += 0.125) {
+		EXPECT_DOUBLE_EQ(explicit_default(x), default_filter(x));
+	}
+}
+
+TEST(FilterTest, test_lanczos_parameter_validation)
+{
+	try {
+		zimg::resize::LanczosFilter f{ 0 };
+		FAIL() << "zero tap count accepted";
+	} catch (const zimg::error::IllegalArgument &e) {
+		EXPECT_STREQ("lanczos tap count out of range", e.what());
+	}
+
+	try {
+		zimg::resize::LanczosFilter f{ zimg::resize::LanczosFilter::MAX_TAPS };
+		FAIL() << "maximum tap count accepted";
+	} catch (const zimg::error::IllegalArgument &e) {
+		EXPECT_STREQ("lanczos tap count out of range", e.what());
+	}
+
+	// Boundary values of the documented domain are accepted.
+	EXPECT_NO_THROW(zimg::resize::LanczosFilter{ zimg::resize::LanczosFilter::MIN_TAPS });
+	EXPECT_NO_THROW(zimg::resize::LanczosFilter{ zimg::resize::LanczosFilter::MAX_TAPS - 1 });
 }

@@ -370,6 +370,25 @@ typedef enum zimg_dither_type_e {
 
 /**
  * Resampling method constants.
+ *
+ * The parameter domains documented here apply to {@link zimg_graph_builder_params.filter_param_a}
+ * and {@link zimg_graph_builder_params.filter_param_b} (and their "_uv"
+ * counterparts). Any parameter outside its documented domain causes graph
+ * construction to fail with {@link ZIMG_ERROR_ILLEGAL_ARGUMENT}.
+ *
+ * | Filter                | filter_param_a              | filter_param_b              |
+ * |-----------------------|-----------------------------|-----------------------------|
+ * | ZIMG_RESIZE_POINT     | unused (ignored)            | unused (ignored)            |
+ * | ZIMG_RESIZE_BILINEAR  | unused (ignored)            | unused (ignored)            |
+ * | ZIMG_RESIZE_BICUBIC   | "b", finite, [0.0, 1.0], default 0.0 | "c", finite, [0.0, 1.0], default 0.5 |
+ * | ZIMG_RESIZE_SPLINE16  | unused (ignored)            | unused (ignored)            |
+ * | ZIMG_RESIZE_SPLINE36  | unused (ignored)            | unused (ignored)            |
+ * | ZIMG_RESIZE_SPLINE64  | unused (ignored)            | unused (ignored)            |
+ * | ZIMG_RESIZE_LANCZOS   | tap count, integer in [1, 15], default 3 | unused (ignored)  |
+ *
+ * For ZIMG_RESIZE_BICUBIC, the two parameters must be specified together:
+ * either both left at the NAN default or both set to finite values in the
+ * documented range. Setting only one of them is rejected.
  */
 typedef enum zimg_resample_filter_e {
 	ZIMG_RESIZE_POINT    = 0, /**< Nearest-neighbor filter, never anti-aliased. */
@@ -599,15 +618,27 @@ typedef struct zimg_graph_builder_params {
 	/**
 	 * Parameters for resampling filter.
 	 *
-	 * The meaning of this field depends on the filter selected.
+	 * The meaning of this field depends on the filter selected; see
+	 * {@link zimg_resample_filter_e} for the parameter domain and default
+	 * value of each filter.
 	 *
-	 * For ZIMG_RESIZE_BICUBIC, {@p filter_param_a} and {@p filter_param_b} are
-	 * the "b" and "c" parameters. If one parameter is specified, the other must
-	 * also be specified to avoid unexpected behavior.
+	 * For ZIMG_RESIZE_BICUBIC, {@p filter_param_a} and {@p filter_param_b}
+	 * are the "b" and "c" parameters. Both parameters must be specified
+	 * together: specifying only one while the other remains NAN fails graph
+	 * construction with {@link ZIMG_ERROR_ILLEGAL_ARGUMENT}. Each specified
+	 * parameter must be a finite number in the inclusive range [0.0, 1.0].
 	 *
-	 * For ZIMG_RESIZE_LANCZOS, {@p filter_param_a} is the number of filter taps.
+	 * For ZIMG_RESIZE_LANCZOS, {@p filter_param_a} is the number of filter
+	 * taps and must be a finite integral value in the inclusive range
+	 * [1, 15]. {@p filter_param_b} is unused.
 	 *
-	 * The default value is NAN, which results in a library default being used.
+	 * Filters without parameters (ZIMG_RESIZE_POINT, ZIMG_RESIZE_BILINEAR,
+	 * ZIMG_RESIZE_SPLINE16, ZIMG_RESIZE_SPLINE36, ZIMG_RESIZE_SPLINE64)
+	 * ignore both fields.
+	 *
+	 * The default value is NAN, which results in a library default being
+	 * used. Non-finite values other than NAN, as well as out-of-range or
+	 * partial parameter specifications, are rejected.
 	 */
 	double filter_param_a;
 	double filter_param_b;                     /**< @see filter_param_a */

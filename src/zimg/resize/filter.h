@@ -52,12 +52,22 @@ public:
 
 /**
  * Bicubic filter.
+ *
+ * The filter is parameterized by the two Mitchell-Netravali coefficients "b"
+ * and "c". When omitted, the documented Catmull-Rom defaults are used. When
+ * provided, both parameters must be finite numbers in the range [0.0, 1.0];
+ * non-finite values (infinities, NaN) and values outside that range are
+ * rejected with zimg::error::IllegalArgument.
  */
 class BicubicFilter : public Filter {
 public:
 	// Catmull-Rom.
 	static constexpr double DEFAULT_B = 0.0;
 	static constexpr double DEFAULT_C = 0.5;
+
+	// Inclusive parameter domain shared by "b" and "c".
+	static constexpr double MIN_PARAM = 0.0;
+	static constexpr double MAX_PARAM = 1.0;
 private:
 	double p0, p2, p3;
 	double q0, q1, q2, q3;
@@ -65,8 +75,10 @@ public:
 	/**
 	 * Initialize a BicubicFilter with given parameters.
 	 *
-	 * @param b "b" parameter to bicubic filter
-	 * @param c "c" parameter to bicubic filter
+	 * @param b "b" parameter to bicubic filter, finite value in [0.0, 1.0]
+	 * @param c "c" parameter to bicubic filter, finite value in [0.0, 1.0]
+	 * @throws zimg::error::IllegalArgument if either parameter is non-finite
+	 *         or outside the inclusive range [0.0, 1.0]
 	 */
 	BicubicFilter(double b = DEFAULT_B, double c = DEFAULT_C);
 
@@ -107,18 +119,27 @@ public:
 
 /**
  * Lanczos filter.
+ *
+ * The filter is parameterized by its tap count, which must be an integer in
+ * the range [1, MAX_TAPS - 1]. A tap count of zero or a count greater than
+ * or equal to MAX_TAPS is rejected with zimg::error::IllegalArgument.
  */
 class LanczosFilter : public Filter {
 public:
 	static constexpr unsigned DEFAULT_TAPS = 3;
 	static constexpr unsigned MAX_TAPS = 16;
+
+	// Inclusive lower bound of the tap count domain.
+	static constexpr unsigned MIN_TAPS = 1;
 private:
 	unsigned taps;
 public:
 	/**
 	 * Initialize a LanczosFilter for a given number of taps.
 	 *
-	 * @param taps number of taps
+	 * @param taps number of taps, in [1, MAX_TAPS - 1]
+	 * @throws zimg::error::IllegalArgument if the tap count is zero or not
+	 *         less than MAX_TAPS
 	 */
 	explicit LanczosFilter(unsigned taps);
 
