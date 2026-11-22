@@ -29,6 +29,38 @@ void integer_to_integer(const void *src, void *dst, unsigned shift, unsigned lef
 	std::transform(src_p + left, src_p + right, dst_p + left, [=](T x) { return static_cast<U>(static_cast<unsigned>(x) << shift); });
 }
 
+template <class T, class U>
+void integer_convert_n(const void *src, void *dst, unsigned depth_in, unsigned depth_out, bool fullrange,
+                       unsigned left, unsigned right)
+{
+	const T *src_p = static_cast<const T *>(src);
+	U *dst_p = static_cast<U *>(dst);
+
+	std::transform(src_p + left, src_p + right, dst_p + left, [=](T x) {
+		uint32_t v = static_cast<uint32_t>(static_cast<unsigned>(x));
+		uint32_t r = fullrange ? integer_scale_fullrange(v, depth_in, depth_out)
+		                       : integer_scale_shift(v, depth_in, depth_out);
+		return static_cast<U>(r);
+	});
+}
+
+typedef void (*integer_convert_func)(const void *src, void *dst, unsigned depth_in, unsigned depth_out,
+                                     bool fullrange, unsigned left, unsigned right);
+
+integer_convert_func select_integer_convert_func(PixelType pixel_in, PixelType pixel_out)
+{
+	if (pixel_in == PixelType::BYTE && pixel_out == PixelType::BYTE)
+		return integer_convert_n<uint8_t, uint8_t>;
+	else if (pixel_in == PixelType::BYTE && pixel_out == PixelType::WORD)
+		return integer_convert_n<uint8_t, uint16_t>;
+	else if (pixel_in == PixelType::WORD && pixel_out == PixelType::BYTE)
+		return integer_convert_n<uint16_t, uint8_t>;
+	else if (pixel_in == PixelType::WORD && pixel_out == PixelType::WORD)
+		return integer_convert_n<uint16_t, uint16_t>;
+	else
+		error::throw_<error::InternalError>("no conversion between pixel types");
+}
+
 template <class T>
 void integer_to_half(const void *src, void *dst, float scale, float offset, unsigned left, unsigned right)
 {
@@ -144,6 +176,68 @@ public:
 };
 
 
+// Exact integer-to-integer conversion. Widening reproduces the full-scale
+// value via bit replication (full range) or left shift (limited range);
+// narrowing applies the integral round-half-to-even rule. The limited-range
+// widening case is delegated to the SIMD-accelerated left-shift filter.
+class IntegerConvert : public graph::PointFilter {
+	left_shift_func m_shift_func;
+	integer_convert_func m_func;
+	unsigned m_depth_in;
+	unsigned m_depth_out;
+	bool m_fullrange;
+	bool m_left_shift;
+	unsigned m_shift;
+
+	void check_preconditions(unsigned width, const PixelFormat &pixel_in, const PixelFormat &pixel_out)
+	{
+		zassert_d(width <= pixel_max_width(pixel_in.type), "overflow");
+		zassert_d(width <= pixel_max_width(pixel_out.type), "overflow");
+
+		if (!pixel_is_integer(pixel_in.type) || !pixel_is_integer(pixel_out.type))
+			error::throw_<error::InternalError>("cannot convert floating point types");
+		if (pixel_in.fullrange != pixel_out.fullrange)
+			error::throw_<error::InternalError>("integer conversion requires matching range flags");
+		if (pixel_in.chroma != pixel_out.chroma)
+			error::throw_<error::InternalError>("cannot convert between luma and chroma");
+		if (pixel_in.fullrange && pixel_in.chroma)
+			error::throw_<error::InternalError>("full-range chroma conversion goes through floating point");
+		if (pixel_out.depth > 16 || pixel_in.depth > 16)
+			error::throw_<error::InternalError>("unsupported bit depth");
+	}
+public:
+	IntegerConvert(left_shift_func shift_func, integer_convert_func func, unsigned width, unsigned height,
+	               const PixelFormat &pixel_in, const PixelFormat &pixel_out) :
+		PointFilter(width, height, pixel_out.type),
+		m_shift_func{ shift_func },
+		m_func{ func },
+		m_depth_in{ pixel_in.depth },
+		m_depth_out{ pixel_out.depth },
+		m_fullrange{ pixel_in.fullrange },
+		m_left_shift{},
+		m_shift{}
+	{
+		check_preconditions(width, pixel_in, pixel_out);
+
+		m_desc.num_deps = 1;
+		m_desc.num_planes = 1;
+		m_desc.flags.in_place = pixel_size(pixel_in.type) == pixel_size(pixel_out.type);
+
+		m_left_shift = !m_fullrange && pixel_out.depth >= pixel_in.depth;
+		m_shift = m_left_shift ? pixel_out.depth - pixel_in.depth : 0;
+	}
+
+	void process(const graphengine::BufferDescriptor *in, const graphengine::BufferDescriptor *out,
+	             unsigned i, unsigned left, unsigned right, void *, void *) const noexcept override
+	{
+		if (m_left_shift)
+			m_shift_func(in->get_line(i), out->get_line(i), m_shift, left, right);
+		else
+			m_func(in->get_line(i), out->get_line(i), m_depth_in, m_depth_out, m_fullrange, left, right);
+	}
+};
+
+
 class ConvertToFloat : public graph::PointFilter {
 	depth_convert_func m_func;
 	float m_scale;
@@ -198,6 +292,23 @@ std::unique_ptr<graphengine::Filter> create_left_shift(unsigned width, unsigned 
 		func = select_left_shift_func(pixel_in.type, pixel_out.type);
 
 	return std::make_unique<IntegerLeftShift>(func, width, height, pixel_in, pixel_out);
+}
+
+std::unique_ptr<graphengine::Filter> create_integer_convert(unsigned width, unsigned height, const PixelFormat &pixel_in, const PixelFormat &pixel_out, CPUClass cpu)
+{
+	left_shift_func shift_func = nullptr;
+
+#if defined(ZIMG_X86)
+	shift_func = select_left_shift_func_x86(pixel_in.type, pixel_out.type, cpu);
+#elif defined(ZIMG_ARM)
+	shift_func = select_left_shift_func_arm(pixel_in.type, pixel_out.type, cpu);
+#endif
+	if (!shift_func)
+		shift_func = select_left_shift_func(pixel_in.type, pixel_out.type);
+
+	integer_convert_func func = select_integer_convert_func(pixel_in.type, pixel_out.type);
+
+	return std::make_unique<IntegerConvert>(shift_func, func, width, height, pixel_in, pixel_out);
 }
 
 std::unique_ptr<graphengine::Filter> create_convert_to_float(unsigned width, unsigned height, const PixelFormat &pixel_in, const PixelFormat &pixel_out, CPUClass cpu)

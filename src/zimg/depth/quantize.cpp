@@ -20,6 +20,63 @@ T bit_cast(const U &x) noexcept
 } // namespace
 
 
+uint32_t integer_scale_fullrange(uint32_t x, unsigned depth_in, unsigned depth_out) noexcept
+{
+	if (depth_out > depth_in) {
+		// Bit replication: place x in the high bits and fill the remaining
+		// low bits by cycling through the source bits from MSB to LSB.
+		// For n <= 2*b (every depth >= 8) the low part is a prefix of x, so
+		// the loop reduces to (x << (n-b)) | (x >> (2*b-n)); for sub-8-bit
+		// sources the source pattern is repeated as many times as needed,
+		// so full scale still maps to full scale.
+		uint32_t r = x << (depth_out - depth_in);
+		unsigned fill = depth_out - depth_in;
+		for (unsigned k = 0; k < fill; ++k) {
+			unsigned src_bit = depth_in - 1 - (k % depth_in);
+			if (x & (1U << src_bit))
+				r |= 1U << (fill - 1 - k);
+		}
+		return r;
+	} else if (depth_out < depth_in) {
+		// Scale to the destination range, round half to even.
+		uint64_t num = (static_cast<uint64_t>(1) << depth_out) - 1;
+		uint64_t den = (static_cast<uint64_t>(1) << depth_in) - 1;
+		uint64_t prod = static_cast<uint64_t>(x) * num;
+		uint64_t q = prod / den;
+		uint64_t rem = prod - q * den;
+		uint64_t twice = rem * 2;
+
+		if (twice > den || (twice == den && (q & 1)))
+			++q;
+
+		uint32_t max_out = static_cast<uint32_t>(num);
+		return q > max_out ? max_out : static_cast<uint32_t>(q);
+	} else {
+		return x;
+	}
+}
+
+uint32_t integer_scale_shift(uint32_t x, unsigned depth_in, unsigned depth_out) noexcept
+{
+	if (depth_out > depth_in) {
+		return x << (depth_out - depth_in);
+	} else if (depth_out < depth_in) {
+		unsigned shift = depth_in - depth_out;
+		uint32_t q = x >> shift;
+		uint32_t rem = x & ((1U << shift) - 1);
+		uint32_t half = 1U << (shift - 1);
+
+		if (rem > half || (rem == half && (q & 1U)))
+			++q;
+
+		uint32_t max_out = (1U << depth_out) - 1;
+		return q > max_out ? max_out : q;
+	} else {
+		return x;
+	}
+}
+
+
 #define FLOAT_HALF_MANT_SHIFT (23 - 10)
 #define FLOAT_HALF_EXP_ADJUST (127 - 15)
 float half_to_float(uint16_t f16w) noexcept

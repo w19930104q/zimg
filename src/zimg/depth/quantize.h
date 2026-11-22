@@ -43,6 +43,27 @@ inline std::pair<float, float> get_scale_offset(const PixelFormat &pixel_in, con
 	return{ scale, offset };
 }
 
+// Integer-domain scaling for full-range formats (zero offset).
+//
+// Widening uses bit replication, so the full-scale value of the source maps
+// to the full-scale value of the destination. The source pattern is placed in
+// the high bits and cycled into the remaining low bits; for n <= 2*b the
+// loop reduces to the shift-and-OR form
+//   r = (x << (n - b)) | (x >> (2*b - n)).
+//
+// Narrowing scales by (2^n - 1)/(2^b - 1) and rounds to nearest, ties to even:
+//   r = RNE(x * (2^n - 1) / (2^b - 1)), clamped to the destination range.
+// All arithmetic is integral, so the result does not depend on floating-point
+// rounding modes or intermediate precision.
+uint32_t integer_scale_fullrange(uint32_t x, unsigned depth_in, unsigned depth_out) noexcept;
+
+// Integer-domain scaling for limited-range (video) formats.
+//
+// Widening is an exact left shift:  r = x << k,  k = n - b.
+// Narrowing inverts the shift using round-to-nearest, ties to even:
+//   r = RNE(x / 2^k), clamped to the destination range.
+uint32_t integer_scale_shift(uint32_t x, unsigned depth_in, unsigned depth_out) noexcept;
+
 float half_to_float(uint16_t f16w) noexcept;
 
 uint16_t float_to_half(float f32) noexcept;

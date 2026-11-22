@@ -20,6 +20,19 @@ bool is_lossless_conversion(const PixelFormat &pixel_in, const PixelFormat &pixe
 	       pixel_out.depth >= pixel_in.depth;
 }
 
+// Exact integer scaling is available when both endpoints are integers with
+// matching range and color family, and the transfer has no additive offset.
+// Full-range luma and all limited-range formats have zero offset; full-range
+// chroma and cross-range conversions keep using the floating-point pipeline.
+bool is_exact_integer_conversion(const PixelFormat &pixel_in, const PixelFormat &pixel_out)
+{
+	return pixel_is_integer(pixel_in.type) &&
+	       pixel_is_integer(pixel_out.type) &&
+	       pixel_in.fullrange == pixel_out.fullrange &&
+	       pixel_in.chroma == pixel_out.chroma &&
+	       !(pixel_in.fullrange && pixel_in.chroma);
+}
+
 } // namespace
 
 
@@ -58,6 +71,8 @@ DepthConversion::result DepthConversion::create() const try
 		return{};
 	else if (is_lossless_conversion(pixel_in, pixel_out))
 		return{ create_left_shift(width, height, pixel_in, pixel_out, cpu), planes.data() };
+	else if (dither_type == DitherType::NONE && is_exact_integer_conversion(pixel_in, pixel_out))
+		return{ create_integer_convert(width, height, pixel_in, pixel_out, cpu), planes.data() };
 	else if (pixel_is_float(pixel_out.type))
 		return{ create_convert_to_float(width, height, pixel_in, pixel_out, cpu), planes.data() };
 	else

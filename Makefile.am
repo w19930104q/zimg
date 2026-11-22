@@ -344,6 +344,7 @@ test_unit_test_SOURCES = \
 	test/colorspace/colorspace_test.cpp \
 	test/colorspace/gamma_test.cpp \
 	test/depth/depth_convert_test.cpp \
+	test/depth/depth_matrix_test.cpp \
 	test/depth/dither_test.cpp \
 	test/graph/graphbuilder_test.cpp \
 	test/resize/filter_test.cpp \

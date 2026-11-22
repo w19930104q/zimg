@@ -23,6 +23,9 @@ typedef void (*depth_f16c_func)(const void *src, void *dst, unsigned left, unsig
 
 std::unique_ptr<graphengine::Filter> create_left_shift(unsigned width, unsigned height, const PixelFormat &pixel_in, const PixelFormat &pixel_out, CPUClass cpu);
 
+// Exact integer-to-integer conversion (bit-replication widen, RNE narrow).
+std::unique_ptr<graphengine::Filter> create_integer_convert(unsigned width, unsigned height, const PixelFormat &pixel_in, const PixelFormat &pixel_out, CPUClass cpu);
+
 std::unique_ptr<graphengine::Filter> create_convert_to_float(unsigned width, unsigned height, const PixelFormat &pixel_in, const PixelFormat &pixel_out, CPUClass cpu);
 
 } // namespace zimg::depth

@@ -24,6 +24,11 @@ enum class DitherType {
 	ERROR_DIFFUSION,
 };
 
+// Rounding and scaling semantics for every depth/dither combination
+// (bit-replication widening, round-half-to-even narrowing, direct vs.
+// floating-point path equivalence, round-trip bounds) are specified in
+// doc/depth-conversion.md.
+
 struct DepthConversion {
 	struct result {
 		std::array<std::unique_ptr<graphengine::Filter>, 4> filters;
